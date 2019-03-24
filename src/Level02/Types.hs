@@ -14,7 +14,7 @@ module Level02.Types
   ) where
 
 import           Data.ByteString (ByteString)
-import           Data.Text       (Text)
+import qualified Data.Text as T  (Text, length)
 
 -- Working through the specification for our application, what are the
 -- types of requests we're going to handle?
@@ -43,11 +43,11 @@ import           Data.Text       (Text)
 -- for you:
 
 -- Topic
-newtype Topic = Topic Text
+newtype Topic = Topic T.Text
   deriving Show
 
 -- CommentText
-newtype CommentText = CommentText Text
+newtype CommentText = CommentText T.Text
   deriving Show
 
 -- Using these convenient definitions, we can create the following constructors
@@ -56,14 +56,22 @@ newtype CommentText = CommentText Text
 -- AddRq : Which needs the target topic, and the body of the comment.
 -- ViewRq : Which needs the topic being requested.
 -- ListRq : Which doesn't need anything and lists all of the current topics.
-data RqType
 
+-- data RqType = AddRq { topic :: Topic, comment :: CommentText }
+--             | ViewRq { topic :: Topic }
+--             | LisRq
+data RqType = AddRq Topic CommentText
+            | ViewRq Topic
+            | ListRq
 -- Not everything goes according to plan, but it's important that our types
 -- reflect when errors can be introduced into our program. Additionally it's
 -- useful to be able to be descriptive about what went wrong.
 
 -- Fill in the error constructors as you need them.
-data Error
+data Error = EmptyTopicName
+           | EmptyComment
+           | InvalidMethod ByteString
+           | InvalidRoute
 
 
 -- Provide the constructors for a sum type to specify the `ContentType` Header,
@@ -72,7 +80,7 @@ data Error
 --
 -- - plain text
 -- - json
-data ContentType
+data ContentType = PlainText | Json 
 
 -- The ``ContentType`` constructors don't match what is required for the header
 -- information. Because ``wai`` uses a stringly type. So write a function that
@@ -88,8 +96,8 @@ data ContentType
 renderContentType
   :: ContentType
   -> ByteString
-renderContentType =
-  error "renderContentType not implemented"
+renderContentType PlainText = "text/plain"
+renderContentType Json = "application/json"
 
 -- We can choose to *not* export the constructor for a data type and instead
 -- provide a function of our own. In our case, we're not interested in empty
@@ -100,27 +108,29 @@ renderContentType =
 -- but not export the constructor.
 
 mkTopic
-  :: Text
+  :: T.Text
   -> Either Error Topic
-mkTopic =
-  error "mkTopic not implemented"
-
+mkTopic name | T.length name == 0 = Left EmptyTopicName 
+             | otherwise          = Right $ Topic name
+  
 getTopic
   :: Topic
-  -> Text
-getTopic =
-  error "getTopic not implemented"
+  -> T.Text
+getTopic (Topic name) = name
+  
 
 mkCommentText
-  :: Text
+  :: T.Text
   -> Either Error CommentText
-mkCommentText =
-  error "mkCommentText not implemented"
+mkCommentText c = 
+  case T.length c of
+    0 -> Left EmptyComment
+    _ -> Right $ CommentText c
+  
 
 getCommentText
   :: CommentText
-  -> Text
-getCommentText =
-  error "getCommentText not implemented"
+  -> T.Text
+getCommentText (CommentText c) = c
 
 ---- Go to `src/Level02/Core.hs` next
