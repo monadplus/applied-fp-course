@@ -25,7 +25,8 @@ module Main where
 
 -- | 'tasty' takes care of managing all of our test cases, running them,
 -- checking results and then providing us with a report.
-import           Test.Tasty         (defaultMain, testGroup)
+import           Test.Tasty
+import           Test.Tasty.HUnit
 
 -- | 'tasty-wai' makes it easier to create requests to submit to our
 -- application, and provides some helper functions for checking our assertions.
@@ -36,7 +37,7 @@ import           Test.Tasty.Wai     (assertBody, assertStatus', get, post,
 -- 'tasty-hunit' package. More information is available on the Hackage page:
 -- https://hackage.haskell.org/package/tasty-hunit.
 --
--- import qualified Test.Tasty.HUnit as HU
+import qualified Test.Tasty.HUnit as HU
 --
 
 import           Network.HTTP.Types as HTTP
@@ -44,16 +45,26 @@ import           Network.HTTP.Types as HTTP
 -- | This import is provided for you so you can check your work from Level02. As
 -- you move forward, come back and import your latest 'Application' so that you
 -- can test your work as you progress.
-import qualified Level02.Core       as Core
+
+import qualified Level01.Core       as Core
+-- import qualified Level02.Core       as Core
 
 main :: IO ()
 main = defaultMain $ testGroup "Applied FP Course - Tests"
 
-  [ testWai Core.app "List Topics" $
-      get "fudge/view" >>= assertStatus' HTTP.status200
+  [ 
+    testWai Core.app "Hello World" $ do
+      resp <- get ""
+      assertStatus' HTTP.status200 resp
+      assertBody "Hello world" resp
+-- TODO
+--   testWai Core.app "List Topics" $
+--       get "fudge/view" >>= assertStatus' HTTP.status200
 
-  , testWai Core.app "Empty Input" $ do
-      resp <- post "fudge/add" ""
-      assertStatus' HTTP.status400 resp
-      assertBody "Empty Comment Text" resp
+--   , testWai Core.app "Empty Input" $ do
+--       resp <- post "fudge/add" ""
+--       assertStatus' HTTP.status400 resp
+--       assertBody "Empty Comment Text" resp
   ]
+
+  

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
-module Level01.Core (runApp) where
+module Level01.Core (runApp, app) where
 
 import           Network.Wai              (Application, Request, Response,
                                            ResponseReceived, responseLBS)
@@ -32,8 +32,11 @@ app
   :: Request
   -> (Response -> IO ResponseReceived)
   -> IO ResponseReceived
-app _ cb =
-  error "Application not implemented"
+app req respond = respond response 
+  where
+    -- message :: String -> ByteString
+    -- message = fromString "Hello World"
+    response = responseLBS status200 [] "Hello world"
 
 -- We keep this main function here as it is useful to build your application as
 -- a library. The reasoning behind this is that when you come to do your
@@ -41,4 +44,4 @@ app _ cb =
 -- needing to worry about any initialisation code you've buried in your
 -- executable Main.hs.
 runApp :: IO ()
-runApp = run undefined undefined
+runApp = run 8080 app
