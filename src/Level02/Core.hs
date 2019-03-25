@@ -104,10 +104,8 @@ mkErrorResponse EmptyTopicName =
   resp404 PlainText "Topic not found"
 mkErrorResponse EmptyComment = 
   resp400 PlainText "Invalid comment: empty"
-mkErrorResponse (InvalidMethod method) = 
-  resp400 PlainText (LBS.fromStrict $ "Invalid method: " <> method)
-mkErrorResponse InvalidRoute = 
-  resp400 PlainText "Invalid route"
+mkErrorResponse RouteNotFound = 
+  resp404 PlainText "Route not found"
 
 -- | Use our ``RqType`` helpers to write a function that will take the input
 -- ``Request`` from the Wai library and turn it into something our application
@@ -118,21 +116,16 @@ mkRequest
 mkRequest req = do 
   body <- bodyIO
   return $ 
-    case method of 
-      "POST"  -> case path of 
-        [t, "add"] -> mkAddRequest t body 
-        _ -> invalidRoute
-      "GET"   -> case path of 
-        [t, "view"] -> mkViewRequest t
-        ["list"]    -> mkListRequest
-        _           -> invalidRoute
-      invalid -> invalidMethod invalid
+    case (method, path) of 
+      ("POST", [t, "add"])  -> mkAddRequest t body 
+      ("GET",  [t, "view"]) -> mkViewRequest t
+      ("GET",  ["list"])    -> mkListRequest
+      _                     -> notFound
   where
     bodyIO        = lazyRequestBody req
     method        = requestMethod req
     path          = pathInfo req
-    invalidRoute  = Left InvalidRoute 
-    invalidMethod = Left . InvalidMethod
+    notFound      = Left RouteNotFound
 
 -- | If we find that we need more information to handle a request, or we have a
 -- new type of request that we'd like to handle then we update the ``RqType``
@@ -149,7 +142,7 @@ handleRequest
   :: RqType
   -> Either Error Response
 handleRequest (AddRq topic comment) =
-  let content = "Add comment: " <> getCommentText comment <> " to topic " 
+  let content = "Add comment " <> getCommentText comment <> " to topic " 
                   <> getTopic topic <> " not implemented!"
   in Right $ resp200 PlainText $ textToLazyByteString content
 handleRequest (ViewRq topic) =

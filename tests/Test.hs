@@ -46,25 +46,31 @@ import           Network.HTTP.Types as HTTP
 -- you move forward, come back and import your latest 'Application' so that you
 -- can test your work as you progress.
 
-import qualified Level01.Core       as Core
--- import qualified Level02.Core       as Core
+-- import qualified Level01.Core       as Core
+import qualified Level02.Core       as Core
 
 main :: IO ()
 main = defaultMain $ testGroup "Applied FP Course - Tests"
 
   [ 
-    testWai Core.app "Hello World" $ do
-      resp <- get ""
+    testWai Core.app "Add comment" $ do
+      resp <- post "fudge/add" "sweet"
       assertStatus' HTTP.status200 resp
-      assertBody "Hello world" resp
--- TODO
---   testWai Core.app "List Topics" $
---       get "fudge/view" >>= assertStatus' HTTP.status200
+      assertBody "Add comment sweet to topic fudge not implemented!" resp
 
---   , testWai Core.app "Empty Input" $ do
---       resp <- post "fudge/add" ""
---       assertStatus' HTTP.status400 resp
---       assertBody "Empty Comment Text" resp
+  , testWai Core.app "Add empty comment" $ do
+      resp <- post "fudge/add" ""
+      assertStatus' HTTP.status400 resp
+      assertBody "Invalid comment: empty" resp
+
+  , testWai Core.app "View topic comments" $
+      get "fudge/view" >>= assertStatus' HTTP.status200
+
+  , testWai Core.app "List topics" $
+      get "list" >>= assertStatus' HTTP.status200
+
+  , testWai Core.app "Not found route" $ do
+      resp <- get "fudge/remove"
+      assertStatus' HTTP.status404 resp
+      assertBody "Route not found" resp
   ]
-
-  

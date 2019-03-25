@@ -70,8 +70,7 @@ data RqType = AddRq Topic CommentText
 -- Fill in the error constructors as you need them.
 data Error = EmptyTopicName
            | EmptyComment
-           | InvalidMethod ByteString
-           | InvalidRoute
+           | RouteNotFound
 
 
 -- Provide the constructors for a sum type to specify the `ContentType` Header,
