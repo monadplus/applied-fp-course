@@ -32,35 +32,28 @@ import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 import           Waargonaut.Encode                  (Encoder')
 import qualified Waargonaut.Encode                  as E
 
-import           Level04.Conf                       (Conf, firstAppConfig)
+import           Level04.Conf                       (Conf, firstAppConfig, dbFilePath)
 import qualified Level04.DB                         as DB
 import           Level04.Types                      (ContentType (JSON, PlainText),
                                                      Error (EmptyCommentText, EmptyTopic, UnknownRoute),
                                                      RqType (AddRq, ListRq, ViewRq),
                                                      mkCommentText, mkTopic,
                                                      renderContentType)
+import qualified Data.Bifunctor                     as Bi
 
--- Our start-up is becoming more complicated and could fail in new and
--- interesting ways. But we also want to be able to capture these errors in a
--- single type so that we can deal with the entire start-up process as a whole.
-data StartUpError
-  = DBInitErr SQLiteResponse
+newtype StartUpError = DBInitErr SQLiteResponse
   deriving Show
 
 runApp :: IO ()
-runApp = error "runApp needs re-implementing"
+runApp = 
+  error "Not implemented"
 
--- We need to complete the following steps to prepare our app requirements:
---
--- 1) Load the configuration.
--- 2) Attempt to initialise the database.
---
--- Our application configuration is defined in Conf.hs
---
 prepareAppReqs
   :: IO ( Either StartUpError DB.FirstAppDB )
-prepareAppReqs =
-  error "prepareAppReqs not implemented"
+prepareAppReqs = do
+  ea <- DB.initDB (dbFilePath firstAppConfig)
+  return $ Bi.first DBInitErr ea
+  
 
 -- | Some helper functions to make our lives a little more DRY.
 mkResponse
