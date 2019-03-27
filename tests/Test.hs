@@ -1,76 +1,76 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
--- | **REMINDER**
--- This level is not an isolated module to complete. This level exists as one
--- starting module: `test/Test.hs`. Which you are to import your most recently
--- completed `Application` to be tested.
---
--- As you progress through the course, you are encouraged to return to this
--- `test/Test.hs` and update it so you're able to be confident that your
--- application will behave as you expect. You may also write your tests before
--- you write your functions, this can be useful when trying to think through a
--- problem.
-
--- | This is the only location for tests as you progress through the course.
-
--- | This module starts our very sparse. There are only the imports required to
--- have these initial tests work. Additional tests are for you to build. and may
--- require you to import other modules as you require.
---
--- As you progress through the levels, the initialisation of the 'app' will
--- become more complicated as more components are introduced. Part of the
--- exercise is to work out how to integrate your application with this testing
--- framework.
-
--- | 'tasty' takes care of managing all of our test cases, running them,
--- checking results and then providing us with a report.
 import           Test.Tasty
 import           Test.Tasty.HUnit
-
--- | 'tasty-wai' makes it easier to create requests to submit to our
--- application, and provides some helper functions for checking our assertions.
-import           Test.Tasty.Wai     (assertBody, assertStatus', get, post,
-                                     testWai)
-
--- | For running unit tests for individual functions, we have included the
--- 'tasty-hunit' package. More information is available on the Hackage page:
--- https://hackage.haskell.org/package/tasty-hunit.
---
-import qualified Test.Tasty.HUnit as HU
---
-
+import           Test.Tasty.Wai     (assertBody, assertStatus'
+                                    , buildRequest, buildRequestWithBody
+                                    , get, post, testWai
+                                    , assertContentType)
+import qualified Test.Tasty.HUnit   as HU
 import           Network.HTTP.Types as HTTP
+import           Network.HTTP.Types.Method (StdMethod(..))
+import           Network.Wai.Test   (SResponse(..), request, srequest)         
+import qualified Level04.Core       as Core
+import           Data.ByteString.Lazy.Char8 as LBS
 
--- | This import is provided for you so you can check your work from Level02. As
--- you move forward, come back and import your latest 'Application' so that you
--- can test your work as you progress.
-
--- import qualified Level01.Core       as Core
-import qualified Level02.Core       as Core
 
 main :: IO ()
-main = defaultMain $ testGroup "Applied FP Course - Tests"
+main = do
+    dbOrError <- Core.prepareAppReqs $ Core.Conf ":memory:"
+    case dbOrError of 
+      Left _ -> HU.assertFailure "db error"
+      Right _db -> test _db
+  where
+    test _db = 
+      let app = Core.app _db
 
-  [ 
-    testWai Core.app "Add comment" $ do
-      resp <- post "fudge/add" "sweet"
-      assertStatus' HTTP.status200 resp
-      assertBody "Add comment sweet to topic fudge not implemented!" resp
+        --   assertComments :: SResponse 
+        --                  -> Session ()
+        --   assertComments SResponse{simpleBody = body} =
+        --     undefined
+--             assertFailure :: String -> Session ()
+-- assertFailure msg = msg `deepseq` liftIO (throwIO (WaiTestFailure msg))
+      in defaultMain $ testGroup "Applied FP Course - Tests"        
+        [ 
+            testGroup "Status 2XX" 
+               [
+                  testWai app "Add comment" $ do
+                    resp <- post "fudge/add" "sweet"
+                    assertStatus' HTTP.status200 resp
+                    assertBody "Success" resp
+                
+                , testWai app "View topic comments" $ do
+                    resp <- get "fudge/view"
+                    assertStatus' HTTP.status200 resp
+                    assertContentType "application/json" resp
+                
+                , testWai app "List topics" $ do
+                    resp <- get "list"
+                    assertStatus' HTTP.status200 resp
+                    assertContentType "application/json" resp
 
-  , testWai Core.app "Add empty comment" $ do
-      resp <- post "fudge/add" ""
-      assertStatus' HTTP.status400 resp
-      assertBody "Invalid comment: empty" resp
-
-  , testWai Core.app "View topic comments" $
-      get "fudge/view" >>= assertStatus' HTTP.status200
-
-  , testWai Core.app "List topics" $
-      get "list" >>= assertStatus' HTTP.status200
-
-  , testWai Core.app "Not found route" $ do
-      resp <- get "fudge/remove"
-      assertStatus' HTTP.status404 resp
-      assertBody "Route not found" resp
-  ]
+                , testWai app "Remove topic" $ do
+                    resp <- request $ buildRequest DELETE "fudge/rm"
+                    assertStatus' HTTP.status200 resp
+                    assertBody "Removed" resp
+               ],
+        
+            testGroup "Status 4XX-5XX"
+               [
+                  testWai app "Not defined route" $ do
+                    resp <- get "fudge/all"
+                    assertStatus' HTTP.status404 resp
+                    assertBody "Unknown Route" resp  
+            
+                , testWai app "Empty comment" $ do
+                    resp <- post "fudge/add" ""
+                    assertStatus' HTTP.status400 resp
+                    assertBody "Empty Comment" resp
+                
+                , testWai app "Empty topic" $ do
+                    resp <- post "//add" ""
+                    assertStatus' HTTP.status400 resp
+                    assertBody "Empty Topic" resp
+               ]
+        ]

@@ -10,19 +10,24 @@ module Level04.DB
   , deleteTopic
   ) where
 
+import           Control.Exception                  (bracket)
+import           Control.Monad
 import           Data.Text                          (Text)
 import qualified Data.Text                          as Text
 
 import           Data.Time                          (getCurrentTime)
 
-import           Database.SQLite.Simple             (Connection, Query (Query), Only (Only))
+import           Database.SQLite.Simple             (Connection, Query (Query), Only (Only), NamedParam( (:=) ))
 import qualified Database.SQLite.Simple             as Sql
 
 import qualified Database.SQLite.SimpleErrors       as Sql
-import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
+import           Database.SQLite.SimpleErrors.Types
 
-import           Level04.Types                      (Comment, CommentText,
-                                                     Error, Topic, getTopic)
+import           Level04.Types                      (Comment, CommentText
+                                                    , Error (..), Topic
+                                                    , getTopic, getCommentText
+                                                    , fromDBComment)
+import           Level04.DB.Types                   (DBComment (DBComment))
 
 newtype FirstAppDB = FirstAppDB { 
     dbConn :: Connection 
@@ -40,62 +45,71 @@ initDB
   :: FilePath
   -> IO ( Either SQLiteResponse FirstAppDB )
 initDB fp = 
-  fmap FirstAppDB <$> Sql.runDBAction action
+  Sql.runDBAction $ onFinalize (FirstAppDB <$> action)
   where
     action = do
       conn <- Sql.open fp
       Sql.execute_ conn createTableQ
       return conn
+
+    onFinalize ioa = 
+      bracket ioa closeDB pure
+      
     createTableQ = "CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, topic TEXT, comment TEXT, time TEXT)"
 
--- There are several possible implementations of this function. Particularly
-  -- there may be a trade-off between deciding to throw an Error if a DBComment
-  -- cannot be converted to a Comment, or simply ignoring any DBComment that is
-  -- not valid.
 getComments
   :: FirstAppDB
   -> Topic
   -> IO (Either Error [Comment])
--- 
--- 
-getComments (FirstAppDB conn) t =
+getComments (FirstAppDB conn) topic =
   let
-    topic = getTopic t
-    sql = "SELECT id,topic,comment,time FROM comments WHERE topic = ?"
-  -- 
+    -- TODO: this is failing and I have no idea why ...
+    -- sql = "SELECT id, topic, comment, time FROM comments WHERE topic = pato"
+    sql = "SELECT topic, comment FROM comments"
   in do
-    xs <- Sql.query conn sql (Only topic)
-    (\(id, t, c, time) -> DBComment id t c time) <$> xs
-    -- Aixo retornara Either parsingError DbComment
-    -- Retornar Either Error [Comment] amb forM 
-
+    xs <- Sql.query_ conn sql {- (Only $ getTopic topic) -}{-  :: IO [Int] -}
+    forM_  xs $ \(ti, comment) -> putStrLn $ (ti :: String) <> (comment :: String)
+    -- pure $ traverse fromDBComment xs
+    pure $ Right []
 
 addCommentToTopic
   :: FirstAppDB
   -> Topic
   -> CommentText
   -> IO (Either Error ())
-addCommentToTopic =
-  let
-    sql = "INSERT INTO comments (topic,comment,time) VALUES (?,?,?)"
-  in
-    error "addCommentToTopic not implemented"
+addCommentToTopic (FirstAppDB conn) topic commentText =
+  let sql = "INSERT INTO comments (topic,comment,time) VALUES (:topic, :comment, :time)"
+  in 
+    handleErrors $ do
+      time <- getCurrentTime
+      Sql.executeNamed conn sql [ ":topic" := getTopic topic
+                                  , ":comment" := getCommentText commentText
+                                  , ":time" := time]
 
 getTopics
   :: FirstAppDB
   -> IO (Either Error [Topic])
-getTopics =
+getTopics (FirstAppDB conn) =
   let
     sql = "SELECT DISTINCT topic FROM comments"
   in
-    error "getTopics not implemented"
+    handleErrors (Sql.query_ conn sql :: IO [Topic])
 
 deleteTopic
   :: FirstAppDB
   -> Topic
   -> IO (Either Error ())
-deleteTopic =
+deleteTopic (FirstAppDB conn) topic =
   let
     sql = "DELETE FROM comments WHERE topic = ?"
   in
-    error "deleteTopic not implemented"
+    handleErrors $ Sql.execute conn sql (Only $ getTopic topic)
+
+handleErrors :: IO a -> IO (Either Error a)
+handleErrors action = fmap f (Sql.runDBAction action)
+  where
+    f (Right a) = f (Right a)
+    f (Left (SQLConstraintError _ reason)) = Left $ SQLError reason
+    f (Left (SQLFormatError err)) = Left $ SQLError (Text.pack $ Sql.fmtMessage err)
+    f (Left (SQLResultError err)) = Left $ SQLError "SQLResultError"
+    f (Left (SQLOtherError err)) = Left $ SQLError (Sql.sqlErrorDetails err)

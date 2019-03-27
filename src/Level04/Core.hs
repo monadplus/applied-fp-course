@@ -3,10 +3,11 @@ module Level04.Core
   ( runApp
   , prepareAppReqs
   , app
+  , Conf (Conf)
   ) where
 
 import           Control.Applicative                (liftA2)
-import           Control.Monad                      (join)
+import           Control.Monad                      (join, mzero)
 
 import           Network.Wai                        (Application, Request,
                                                      Response, pathInfo,
@@ -25,19 +26,20 @@ import           Data.Either                        (Either (Left, Right),
 
 import           Data.Semigroup                     ((<>))
 import           Data.Text                          (Text)
-import           Data.Text.Encoding                 (decodeUtf8)
+import           Data.Text.Encoding                 (encodeUtf8, decodeUtf8)
 
 import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 
 import           Waargonaut.Encode                  (Encoder')
 import qualified Waargonaut.Encode                  as E
 
-import           Level04.Conf                       (Conf, firstAppConfig, dbFilePath)
+import           Level04.Conf                       (Conf (Conf), firstAppConfig, dbFilePath)
 import qualified Level04.DB                         as DB
 import           Level04.Types                      (ContentType (JSON, PlainText),
-                                                     Error (EmptyCommentText, EmptyTopic, UnknownRoute),
-                                                     RqType (AddRq, ListRq, ViewRq),
-                                                     mkCommentText, mkTopic,
+                                                     Error (EmptyCommentText, EmptyTopic, UnknownRoute, SQLError),
+                                                     RqType (AddRq, ListRq, ViewRq, RmRq),
+                                                     mkCommentText, getTopic, mkTopic,
+                                                     encodeComment, encodeTopic,
                                                      renderContentType)
 import qualified Data.Bifunctor                     as Bi
 
@@ -45,17 +47,17 @@ newtype StartUpError = DBInitErr SQLiteResponse
   deriving Show
 
 runApp :: IO ()
-runApp = 
-  error "Not implemented"
+runApp = do
+  dbOrError <- prepareAppReqs firstAppConfig
+  case dbOrError of 
+    Left _   -> mzero
+    Right db -> run 3000 (app db)
 
-prepareAppReqs
-  :: IO ( Either StartUpError DB.FirstAppDB )
-prepareAppReqs = do
-  ea <- DB.initDB (dbFilePath firstAppConfig)
-  return $ Bi.first DBInitErr ea
+prepareAppReqs :: Conf 
+               -> IO ( Either StartUpError DB.FirstAppDB )
+prepareAppReqs conf = 
+  Bi.first DBInitErr <$> DB.initDB (dbFilePath conf)
   
-
--- | Some helper functions to make our lives a little more DRY.
 mkResponse
   :: Status
   -> ContentType
@@ -101,11 +103,9 @@ resp200Json e =
   mkResponse status200 JSON .
   E.simplePureEncodeNoSpaces e
 
--- |
-app
-  :: DB.FirstAppDB -- ^ Add the Database record to our app so we can use it
-  -> Application
-app db rq cb = do
+app :: DB.FirstAppDB
+    -> Application
+app _db rq cb = do
   rq' <- mkRequest rq
   resp <- handleRespErr <$> handleRErr rq'
   cb resp
@@ -113,43 +113,32 @@ app db rq cb = do
     handleRespErr :: Either Error Response -> Response
     handleRespErr = either mkErrorResponse id
 
-    -- We want to pass the Database through to the handleRequest so it's
-    -- available to all of our handlers.
     handleRErr :: Either Error RqType -> IO (Either Error Response)
-    handleRErr = either ( pure . Left ) ( handleRequest db )
+    handleRErr = either ( pure . Left ) ( handleRequest _db )
 
--- | Handle each of the different types of request. See how the types have helped narrow our focus
--- to only those types of request that we care about. Along with ensuring that once the data has
--- reached this point, we don't have to continually check if it is valid or usable. The types and
--- data structures that we created have taken care of that for us at an earlier stage, simplifying
--- this function.
---
--- For both the 'ViewRq' and 'ListRq' functions, we'll need to pass the correct 'Encoder' to the
--- 'resp200Json' function.
 handleRequest
   :: DB.FirstAppDB
   -> RqType
   -> IO (Either Error Response)
-handleRequest _db (AddRq _ _) =
-  (resp200 PlainText "Success" <$) <$> error "AddRq handler not implemented"
-handleRequest _db (ViewRq _)  =
-  error "ViewRq handler not implemented"
-handleRequest _db ListRq      =
-  error "ListRq handler not implemented"
+handleRequest _db (AddRq topic comment) =
+  (resp200 PlainText "Success" <$) <$> DB.addCommentToTopic _db topic comment
+handleRequest _db (ViewRq topic) =
+  (resp200Json (E.list encodeComment)  <$>) <$> DB.getComments _db topic
+handleRequest _db ListRq =
+  (resp200Json (E.list encodeTopic) <$>) <$> DB.getTopics _db 
+handleRequest _db (RmRq topic) =
+  (resp200 PlainText "Removed" <$) <$> DB.deleteTopic _db topic
 
 mkRequest
   :: Request
   -> IO ( Either Error RqType )
 mkRequest rq =
   case ( pathInfo rq, requestMethod rq ) of
-    -- Commenting on a given topic
-    ( [t, "add"], "POST" ) -> mkAddRequest t <$> strictRequestBody rq
-    -- View the comments on a given topic
-    ( [t, "view"], "GET" ) -> pure ( mkViewRequest t )
-    -- List the current topics
-    ( ["list"], "GET" )    -> pure mkListRequest
-    -- Finally we don't care about any other requests so throw your hands in the air
-    _                      -> pure ( Left UnknownRoute )
+    ( [t, "add"], "POST" )  -> mkAddRequest t <$> strictRequestBody rq
+    ( [t, "view"], "GET" )    -> pure ( mkViewRequest t )
+    ( ["list"],    "GET" )    -> pure mkListRequest
+    ( [t, "rm"],   "DELETE" ) -> pure ( mkRmRequest t )
+    _                       -> pure ( Left UnknownRoute )
 
 mkAddRequest
   :: Text
@@ -170,6 +159,12 @@ mkListRequest
 mkListRequest =
   Right ListRq
 
+mkRmRequest
+  :: Text 
+  -> Either Error RqType
+mkRmRequest ti = 
+  RmRq <$> mkTopic ti    
+
 mkErrorResponse
   :: Error
   -> Response
@@ -179,3 +174,5 @@ mkErrorResponse EmptyCommentText =
   resp400 PlainText "Empty Comment"
 mkErrorResponse EmptyTopic =
   resp400 PlainText "Empty Topic"
+mkErrorResponse (SQLError err) =
+  resp500 PlainText (LBS.fromStrict $ encodeUtf8 $ "Unexpected error: " <> err)

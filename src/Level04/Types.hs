@@ -14,6 +14,8 @@ module Level04.Types
   , getCommentText
   , renderContentType
   , fromDBComment
+  , encodeComment
+  , encodeTopic
   ) where
 
 import           GHC.Generics               (Generic)
@@ -30,10 +32,15 @@ import           Level04.DB.Types           (DBComment, DBComment(..))
 import           Level04.Types.CommentText  (CommentText, getCommentText,
                                              mkCommentText, encodeCommentText)
 import           Level04.Types.Topic        (Topic, getTopic, mkTopic, encodeTopic)
-import           Level04.Types.Error        (Error (EmptyCommentText, EmptyTopic, UnknownRoute))
+import           Level04.Types.Error        (Error (EmptyCommentText, EmptyTopic, UnknownRoute, SQLError))
 
 newtype CommentId = CommentId { getId :: Int }
   deriving (Eq, Show)
+
+encodeCommentId :: Applicative f
+                => Encoder f CommentId
+encodeCommentId = 
+  getId >$< E.int
 
 data Comment = Comment
   { commentId    :: CommentId
@@ -45,15 +52,11 @@ data Comment = Comment
 
 encodeComment :: Applicative f => Encoder f Comment
 encodeComment = E.mapLikeObj $ \c ->
-    E.intAt "commentId" (getId $ commentId c) .
-    E.textAt "topic" (getTopic $ commentTopic c) .
-    E.textAt "commentText" (getCommentText $ commentBody c) .
+    E.atKey' "commentId"  encodeCommentId (commentId c).
+    E.atKey' "topic" encodeTopic (commentTopic c) .
+    E.atKey' "commentText" encodeCommentText (commentBody c) .
     E.atKey' "commentTime" encodeISO8601DateTime (commentTime c)
 
--- | For safety we take our stored `DBComment` and try to construct a `Comment`
--- that we would be okay with showing someone. However unlikely it may be, this
--- is a nice method for separating out the back and front end of a web app and
--- providing greater guarantees about data cleanliness.
 fromDBComment
   :: DBComment
   -> Either Error Comment
@@ -68,6 +71,7 @@ data RqType
   = AddRq Topic CommentText
   | ViewRq Topic
   | ListRq
+  | RmRq Topic
 
 data ContentType
   = PlainText
