@@ -150,7 +150,8 @@ test-suite app-fp-tests
                      , mtl == 2.2.*
                      , semigroups == 0.18.*
                      , transformers >= 0.4 && < 0.6
-
+                     , waargonaut >= 0.4.2 && < 0.5
+                     , attoparsec >= 0.13 && < 0.15
                      -- [Challenge] Packages
                      , hedgehog >= 0.6 && < 0.7
                      , tasty-hedgehog >= 0.2 && < 0.3

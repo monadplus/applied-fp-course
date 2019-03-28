@@ -16,11 +16,12 @@ module Level04.Types
   , fromDBComment
   , encodeComment
   , encodeTopic
+  , decodeComment
   ) where
 
 import           GHC.Generics               (Generic)
 import           Data.ByteString            (ByteString)
-import           Data.Text                  (Text, pack)
+import           Data.Text                  (Text, pack, unpack)
 import           Data.List                  (stripPrefix)
 import           Data.Maybe                 (fromMaybe)
 import           Data.Functor.Contravariant ((>$<))
@@ -28,11 +29,13 @@ import           Data.Time                  (UTCTime)
 import qualified Data.Time.Format           as TF 
 import           Waargonaut.Encode          (Encoder)
 import qualified Waargonaut.Encode          as E
+import           Waargonaut.Decode          (Decoder)
+import qualified Waargonaut.Decode          as D
 import           Level04.DB.Types           (DBComment, DBComment(..))
 import           Level04.Types.CommentText  (CommentText, getCommentText,
-                                             mkCommentText, encodeCommentText)
-import           Level04.Types.Topic        (Topic, getTopic, mkTopic, encodeTopic)
-import           Level04.Types.Error        (Error (EmptyCommentText, EmptyTopic, UnknownRoute, SQLError))
+                                             mkCommentText, encodeCommentText, decodeCommentText)
+import           Level04.Types.Topic        (Topic, getTopic, mkTopic, encodeTopic, decodeTopic)
+import           Level04.Types.Error        (Error (..))
 
 newtype CommentId = CommentId { getId :: Int }
   deriving (Eq, Show)
@@ -57,6 +60,15 @@ encodeComment = E.mapLikeObj $ \c ->
     E.atKey' "commentText" encodeCommentText (commentBody c) .
     E.atKey' "commentTime" encodeISO8601DateTime (commentTime c)
 
+decodeComment :: Monad f => Decoder f Comment
+decodeComment = D.withCursor $ \c -> do
+  o <- D.down c
+  _commentId <- D.fromKey "commentId"   (CommentId <$> D.int) o 
+  _topic <- D.fromKey "topic"       decodeTopic o
+  _commentBody <- D.fromKey "commentText" decodeCommentText c 
+  _commentTime <- D.fromKey "commentTime" decodeISO8601DateTime c 
+  pure $ Comment _commentId _topic _commentBody _commentTime
+     
 fromDBComment
   :: DBComment
   -> Either Error Comment
@@ -88,3 +100,9 @@ encodeISO8601DateTime = pack . TF.formatTime loc fmt >$< E.text
   where
     fmt = TF.iso8601DateFormat (Just "%H:%M:%S")
     loc = TF.defaultTimeLocale { TF.knownTimeZones = [] }
+
+decodeISO8601DateTime :: Monad f => Decoder f UTCTime
+decodeISO8601DateTime = D.text >>= TF.parseTimeM True loc fmt . unpack
+ where
+  fmt = TF.iso8601DateFormat (Just "%H:%M:%S")
+  loc = TF.defaultTimeLocale { TF.knownTimeZones = [] }

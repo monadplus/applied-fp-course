@@ -4,6 +4,9 @@ module Level04.Core
   , prepareAppReqs
   , app
   , Conf (Conf)
+  , DB.closeDB
+  , decodeComment
+  , Comment
   ) where
 
 import           Control.Applicative                (liftA2)
@@ -36,12 +39,14 @@ import qualified Waargonaut.Encode                  as E
 import           Level04.Conf                       (Conf (Conf), firstAppConfig, dbFilePath)
 import qualified Level04.DB                         as DB
 import           Level04.Types                      (ContentType (JSON, PlainText),
-                                                     Error (EmptyCommentText, EmptyTopic, UnknownRoute, SQLError),
+                                                     Error (..),
                                                      RqType (AddRq, ListRq, ViewRq, RmRq),
                                                      mkCommentText, getTopic, mkTopic,
                                                      encodeComment, encodeTopic,
-                                                     renderContentType)
+                                                     renderContentType, decodeComment,
+                                                     Comment )
 import qualified Data.Bifunctor                     as Bi
+import Debug.Trace
 
 newtype StartUpError = DBInitErr SQLiteResponse
   deriving Show
@@ -50,8 +55,8 @@ runApp :: IO ()
 runApp = do
   dbOrError <- prepareAppReqs firstAppConfig
   case dbOrError of 
-    Left _   -> mzero
-    Right db -> run 3000 (app db)
+    Left e   -> print e
+    Right db -> run 3000 (app db) >> DB.closeDB db
 
 prepareAppReqs :: Conf 
                -> IO ( Either StartUpError DB.FirstAppDB )
@@ -123,7 +128,7 @@ handleRequest
 handleRequest _db (AddRq topic comment) =
   (resp200 PlainText "Success" <$) <$> DB.addCommentToTopic _db topic comment
 handleRequest _db (ViewRq topic) =
-  (resp200Json (E.list encodeComment)  <$>) <$> DB.getComments _db topic
+  (resp200Json (E.list encodeComment) <$>) <$> DB.getComments _db topic
 handleRequest _db ListRq =
   (resp200Json (E.list encodeTopic) <$>) <$> DB.getTopics _db 
 handleRequest _db (RmRq topic) =
@@ -134,11 +139,11 @@ mkRequest
   -> IO ( Either Error RqType )
 mkRequest rq =
   case ( pathInfo rq, requestMethod rq ) of
-    ( [t, "add"], "POST" )  -> mkAddRequest t <$> strictRequestBody rq
+    ( [t, "add"], "POST" )    -> mkAddRequest t <$> strictRequestBody rq
     ( [t, "view"], "GET" )    -> pure ( mkViewRequest t )
     ( ["list"],    "GET" )    -> pure mkListRequest
     ( [t, "rm"],   "DELETE" ) -> pure ( mkRmRequest t )
-    _                       -> pure ( Left UnknownRoute )
+    _                         -> pure ( Left UnknownRoute )
 
 mkAddRequest
   :: Text
@@ -174,5 +179,6 @@ mkErrorResponse EmptyCommentText =
   resp400 PlainText "Empty Comment"
 mkErrorResponse EmptyTopic =
   resp400 PlainText "Empty Topic"
-mkErrorResponse (SQLError err) =
-  resp500 PlainText (LBS.fromStrict $ encodeUtf8 $ "Unexpected error: " <> err)
+mkErrorResponse (DBError err) =
+  -- Don't leak your DB errors over the internet.
+  trace (show err) (resp500 PlainText "Oh noes")
