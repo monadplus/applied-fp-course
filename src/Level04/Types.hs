@@ -106,3 +106,5 @@ decodeISO8601DateTime = D.text >>= TF.parseTimeM True loc fmt . unpack
  where
   fmt = TF.iso8601DateFormat (Just "%H:%M:%S")
   loc = TF.defaultTimeLocale { TF.knownTimeZones = [] }
+  
+-- | Move on to ``src/Level04/DB.hs`` next.
