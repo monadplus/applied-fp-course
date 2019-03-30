@@ -30,7 +30,7 @@ import           Level05.Types                      (Comment, CommentText,
                                                      getCommentText, getTopic,
                                                      mkTopic)
 
-import           Level05.AppM                       (AppM)
+import           Level05.AppM                       (AppM, liftEither)
 
 -- We have a data type to simplify passing around the information we need to run
 -- our database queries. This also allows things to change over time without
@@ -40,7 +40,6 @@ newtype FirstAppDB = FirstAppDB
   { dbConn  :: Connection
   }
 
--- Quick helper to pull the connection and close it down.
 closeDB
   :: FirstAppDB
   -> IO ()
@@ -51,17 +50,10 @@ initDB
   :: FilePath
   -> IO ( Either SQLiteResponse FirstAppDB )
 initDB fp = Sql.runDBAction $ do
-  -- Initialise the connection to the DB...
-  -- - What could go wrong here?
-  -- - What haven't we be told in the types?
   con <- Sql.open fp
-  -- Initialise our one table, if it's not there already
-  _ <- Sql.execute_ con createTableQ
+  Sql.execute_ con createTableQ
   pure $ FirstAppDB con
   where
-  -- Query has an `IsString` instance so string literals like this can be
-  -- converted into a `Query` type when the `OverloadedStrings` language
-  -- extension is enabled.
     createTableQ =
       "CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, topic TEXT, comment TEXT, time INTEGER)"
 
@@ -69,40 +61,48 @@ runDB
   :: (a -> Either Error b)
   -> IO a
   -> AppM b
-runDB =
-  -- This function is intended to abstract away the running of DB functions and
-  -- the catching of any errors. As well as the process of running some
-  -- processing function over those results.
-  error "Write 'runDB' to match the type signature"
-  -- Move your use of DB.runDBAction to this function to avoid repeating
-  -- yourself in the various DB functions.
+runDB f a = do
+  r <- liftIO $ first DBError <$> Sql.runDBAction a
+  liftEither $ r >>= f
 
 getComments
   :: FirstAppDB
   -> Topic
   -> AppM [Comment]
-getComments =
-  error "Copy your completed 'getComments' and refactor to match the new type signature"
+getComments db ti =
+  let q = "SELECT id, topic, comment, time FROM comments WHERE topic = ?"
+  in
+    runDB (traverse fromDBComment) $ 
+      Sql.query (dbConn db) q (Sql.Only . getTopic $ ti)
 
 addCommentToTopic
   :: FirstAppDB
   -> Topic
   -> CommentText
   -> AppM ()
-addCommentToTopic =
-  error "Copy your completed 'appCommentToTopic' and refactor to match the new type signature"
+addCommentToTopic db ti c =
+  let q = "INSERT INTO comments (topic,comment,time) VALUES (?,?,?)"
+  in do
+    now <- liftIO getCurrentTime
+    runDB Right $ Sql.execute (dbConn db) q (getTopic ti, getCommentText c, now)
 
 getTopics
   :: FirstAppDB
   -> AppM [Topic]
-getTopics =
-  error "Copy your completed 'getTopics' and refactor to match the new type signature"
+getTopics db =
+  let q = "SELECT DISTINCT topic FROM comments"
+  in 
+    runDB (traverse (mkTopic . Sql.fromOnly)) $
+      Sql.query_ (dbConn db) q
 
 deleteTopic
   :: FirstAppDB
   -> Topic
   -> AppM ()
-deleteTopic =
-  error "Copy your completed 'deleteTopic' and refactor to match the new type signature"
+deleteTopic db ti =
+  let q = "DELETE FROM comments WHERE topic = ?"
+  in
+    runDB Right $ Sql.execute (dbConn db) q (Sql.Only . getTopic $ ti)
+  
 
 -- Go to 'src/Level05/Core.hs' next.

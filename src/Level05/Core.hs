@@ -4,11 +4,13 @@ module Level05.Core
   ( runApp
   , app
   , prepareAppReqs
+  , Conf.Conf (..)
+  , DB.closeDB
   ) where
 
 import qualified Control.Exception                  as Ex
 import           Control.Monad.IO.Class             (liftIO)
-
+import           Data.Bifunctor                     (first)
 import           Network.Wai                        (Application, Request,
                                                      Response, pathInfo,
                                                      requestMethod, responseLBS,
@@ -38,33 +40,26 @@ import qualified Level05.Conf                       as Conf
 import qualified Level05.DB                         as DB
 import           Level05.Types                      (ContentType (..),
                                                      Error (..),
-                                                     RqType (AddRq, ListRq, ViewRq),
+                                                     RqType (AddRq, ListRq, ViewRq, RmRq),
                                                      encodeComment, encodeTopic,
                                                      mkCommentText, mkTopic,
                                                      renderContentType)
-
+import           Debug.Trace                        (trace)
 -- Our start-up is becoming more complicated and could fail in new and
 -- interesting ways. But we also want to be able to capture these errors in a
 -- single type so that we can deal with the entire start-up process as a whole.
-data StartUpError
+newtype StartUpError
   = DBInitErr SQLiteResponse
   deriving Show
 
 runApp :: IO ()
 runApp = do
-  -- Load our configuration
   cfgE <- prepareAppReqs
-  -- Loading the configuration can fail, so we have to take that into account now.
   case cfgE of
-    Left err   ->
-      -- We can't run our app at all! Display the message and exit the application.
-      undefined
+    Left err  ->
+      print err
     Right cfg ->
-      -- We have a valid config! We can now complete the various pieces needed to run our
-      -- application. This function 'finally' will execute the first 'IO a', and then, even in the
-      -- case of that value throwing an exception, execute the second 'IO b'. We do this to ensure
-      -- that our DB connection will always be closed when the application finishes, or crashes.
-      Ex.finally (run undefined undefined) (DB.closeDB cfg)
+      Ex.finally (run 3000 (app cfg)) (DB.closeDB cfg)
 
 -- We need to complete the following steps to prepare our app requirements:
 --
@@ -76,7 +71,7 @@ runApp = do
 prepareAppReqs
   :: IO ( Either StartUpError DB.FirstAppDB )
 prepareAppReqs =
-  error "copy your prepareAppReqs from the previous level."
+  first DBInitErr <$> DB.initDB (Conf.dbFilePath Conf.firstAppConfig)
 
 -- | Some helper functions to make our lives a little more DRY.
 mkResponse
@@ -125,13 +120,14 @@ resp200Json e =
 
 -- |
 
--- How has this implementation changed, now that we have an AppM to handle the
--- errors for our application? Could it be simplified? Can it be changed at all?
 app
   :: DB.FirstAppDB
   -> Application
 app db rq cb =
-  error "app not reimplemented"
+  runAppM (handleRequest db =<< mkRequest rq) >>= cb . handleRespErr
+  where
+    handleRespErr :: Either Error Response -> Response
+    handleRespErr = either mkErrorResponse id
 
 handleRequest
   :: DB.FirstAppDB
@@ -144,6 +140,7 @@ handleRequest db rqType = case rqType of
   AddRq t c -> resp200 PlainText "Success" <$ DB.addCommentToTopic db t c
   ViewRq t  -> resp200Json (E.list encodeComment) <$> DB.getComments db t
   ListRq    -> resp200Json (E.list encodeTopic)   <$> DB.getTopics db
+  RmRq t    -> resp200 PlainText "Success" <$ DB.deleteTopic db t
 
 mkRequest
   :: Request
@@ -156,6 +153,8 @@ mkRequest rq =
     ( [t, "view"], "GET" ) -> pure ( mkViewRequest t )
     -- List the current topics
     ( ["list"], "GET" )    -> pure mkListRequest
+    -- Remove one topic
+    ( [t, "rm"], "DELETE" ) -> pure ( mkRmRequest t)
     -- Finally we don't care about any other requests so build an Error response
     _                      -> pure ( Left UnknownRoute )
 
@@ -178,6 +177,12 @@ mkListRequest
 mkListRequest =
   Right ListRq
 
+mkRmRequest
+  :: Text 
+  -> Either Error RqType
+mkRmRequest = 
+  fmap RmRq . mkTopic
+
 mkErrorResponse
   :: Error
   -> Response
@@ -187,6 +192,6 @@ mkErrorResponse EmptyCommentText =
   resp400 PlainText "Empty Comment"
 mkErrorResponse EmptyTopic =
   resp400 PlainText "Empty Topic"
-mkErrorResponse ( DBError _ ) =
+mkErrorResponse ( DBError err ) =
   -- Be a sensible developer and don't leak your DB errors over the internet.
-  resp500 PlainText "Oh noes"
+  trace (show err) $ resp500 PlainText "Oh noes"

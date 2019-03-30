@@ -107,6 +107,7 @@ data RqType
   = AddRq Topic CommentText
   | ViewRq Topic
   | ListRq
+  | RmRq Topic
 
 data ContentType
   = PlainText

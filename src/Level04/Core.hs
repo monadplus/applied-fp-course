@@ -5,8 +5,8 @@ module Level04.Core
   , app
   , Conf (Conf)
   , DB.closeDB
-  , decodeComment
-  , Comment
+  , encodeComment
+  , Comment (..)
   ) where
 
 import           Control.Applicative                (liftA2)
@@ -45,7 +45,7 @@ import           Level04.Types                      (ContentType (JSON, PlainTex
                                                      mkCommentText, getTopic, mkTopic,
                                                      encodeComment, encodeTopic,
                                                      renderContentType, decodeComment,
-                                                     Comment )
+                                                     Comment (..) )
 import qualified Data.Bifunctor                     as Bi
 import Debug.Trace
 
@@ -106,8 +106,7 @@ resp200Json
   -> a
   -> Response
 resp200Json e =
-  mkResponse status200 JSON . encodeUtf8 .
-  E.simplePureEncodeTextNoSpaces e
+  mkResponse status200 JSON . encodeUtf8 . E.simplePureEncodeTextNoSpaces e
 
 app :: DB.FirstAppDB
     -> Application

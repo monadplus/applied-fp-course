@@ -11,31 +11,17 @@ import qualified Test.Tasty.HUnit   as HU
 import           Network.HTTP.Types as HTTP
 import           Network.HTTP.Types.Method (StdMethod(..))
 import           Network.Wai.Test   (SResponse(..), request, srequest)         
-import qualified Level04.Core       as Core
-import           Data.ByteString            (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as LBS
-import Control.Monad.IO.Class
-import qualified Waargonaut.Decode as D
-import           Waargonaut.Decode.Error    (DecodeError (ParseFailed))
-import qualified Data.Attoparsec.ByteString as AB
-import           Waargonaut                 (Json, parseWaargonaut)
-import           Data.Bifunctor             (first)
-import           Data.Text                  (pack)
+import           System.Exit        (exitFailure)
+-- 
+import qualified Level05.Core       as Core
 
 main :: IO ()
 main = do
-    dbOrError <- Core.prepareAppReqs $ Core.Conf ":memory:"
+    dbOrError <- Core.prepareAppReqs
     case dbOrError of 
-      Left _ -> HU.assertFailure "db error"
+      Left err -> print err >> exitFailure
       Right _db -> test _db >> Core.closeDB _db
-                   
   where
-    parseFunc :: ByteString -> Either DecodeError Json
-    parseFunc = first (ParseFailed . pack . show) . AB.parseOnly parseWaargonaut
-
-    decode :: ByteString -> Either (DecodeError, D.CursorHistory) Core.Comment
-    decode = D.simpleDecode Core.decodeComment  parseFunc
-
     test _db = 
       let app = Core.app _db
       in defaultMain $ testGroup "Applied FP Course - Tests"        
@@ -51,20 +37,19 @@ main = do
                     resp <- get "fudge/view"
                     assertStatus' HTTP.status200 resp
                     assertContentType "application/json" resp
-                    case decode $ simpleBody resp of 
-                      Left _ -> liftIO HU.assertFailure
-                      Right comment -> undefined
+                    -- asserting on time won't work, you must use a cursor
+                    -- assertBody "[asdf]" resp 
                 
                 , testWai app "List topics" $ do
                     resp <- get "list"
                     assertStatus' HTTP.status200 resp
                     assertContentType "application/json" resp
-                    liftIO $ print $ simpleBody resp
+                    assertBody "[\"fudge\"]" resp
 
                 , testWai app "Remove topic" $ do
                     resp <- request $ buildRequest DELETE "fudge/rm"
                     assertStatus' HTTP.status200 resp
-                    assertBody "Removed" resp
+                    assertBody "Success" resp
                ],
         
             testGroup "Status 4XX-5XX"

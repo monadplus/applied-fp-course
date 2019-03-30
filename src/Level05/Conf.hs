@@ -4,8 +4,9 @@ module Level05.Conf
     , firstAppConfig
     ) where
 
-data Conf = Conf
-  { dbFilePath :: FilePath
+newtype Conf = Conf
+  { 
+    dbFilePath :: FilePath
   }
 
 firstAppConfig :: Conf
