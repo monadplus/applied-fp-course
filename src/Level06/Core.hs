@@ -46,7 +46,8 @@ import           Level06.Types                      (Conf, ConfigError,
                                                      RqType (AddRq, ListRq, ViewRq),
                                                      encodeComment, encodeTopic,
                                                      mkCommentText, mkTopic,
-                                                     renderContentType)
+                                                     renderContentType, confPortToWai,
+                                                     getDBFilePath, getConfFilePath)
 
 -- | Our start-up is becoming more complicated and could fail in new and
 -- interesting ways. But we also want to be able to capture these errors in a
@@ -57,7 +58,16 @@ data StartUpError
   deriving Show
 
 runApplication :: IO ()
-runApplication = error "copy your previous 'runApp' implementation and refactor as needed"
+runApplication = do
+  appE <- runAppM prepareAppReqs
+  either print runWithDBConn appE
+  where
+    runWithDBConn (conf, db) =
+      appWithDB (conf, db) >> DB.closeDB db
+
+    appWithDB (conf, db) = Ex.finally
+      (run ( confPortToWai conf ) (app conf db))
+      $ DB.closeDB db
 
 -- | We need to complete the following steps to prepare our app requirements:
 --
@@ -72,7 +82,10 @@ runApplication = error "copy your previous 'runApp' implementation and refactor 
 -- up!
 --
 prepareAppReqs :: AppM StartUpError (Conf, DB.FirstAppDB)
-prepareAppReqs = error "copy your prepareAppReqs from the previous level."
+prepareAppReqs = do 
+  conf <- first ConfErr (Conf.parseOptions "file/appconfig.json")
+  db   <- first DBInitErr (DB.initDB $ getDBFilePath . getConfFilePath $ conf)  
+  pure (conf, db)
 
 -- | Some helper functions to make our lives a little more DRY.
 mkResponse

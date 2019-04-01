@@ -190,6 +190,7 @@ data PartialConf = PartialConf
   { pcPort       :: Last Port
   , pcDBFilePath :: Last DBFilePath
   }
+  deriving Show
 
 -- Before we can define our ``Monoid`` instance for ``PartialConf``, we'll have
 -- to define a Semigroup instance. We define our ``(<>)`` function to lean

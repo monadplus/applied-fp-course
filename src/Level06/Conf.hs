@@ -5,13 +5,12 @@ module Level06.Conf
     ) where
 
 import           GHC.Word                 (Word16)
-
 import           Data.Bifunctor           (first)
-import           Data.Monoid              ((<>))
+import           Data.Monoid              ((<>), Last (Last, getLast))
 
-import           Level06.AppM             (AppM)
-import           Level06.Types            (Conf, ConfigError,
-                                           DBFilePath (DBFilePath), PartialConf,
+import           Level06.AppM             (AppM(..))
+import           Level06.Types            (Conf (Conf), ConfigError (..),
+                                           DBFilePath (DBFilePath), PartialConf(..),
                                            Port (Port))
 
 import           Level06.Conf.CommandLine (commandLineParser)
@@ -23,7 +22,10 @@ import           Level06.Conf.File        (parseJSONConfigFile)
 defaultConf
   :: PartialConf
 defaultConf =
-  error "defaultConf not implemented"
+  PartialConf {
+    pcPort = Last (Just $ Port 3000),
+    pcDBFilePath = Last (Just $ DBFilePath ":memory:")
+  }
 
 -- | We need something that will take our PartialConf and see if can finally build
 -- a complete ``Conf`` record. Also we need to highlight any missing values by
@@ -31,8 +33,16 @@ defaultConf =
 makeConfig
   :: PartialConf
   -> Either ConfigError Conf
-makeConfig =
-  error "makeConfig not implemented"
+makeConfig pc = Conf
+  <$> lastToEither MissingPort pcPort
+  <*> lastToEither MissingDBFilePath pcDBFilePath
+  where
+    lastToEither
+      :: ConfigError 
+      -> (PartialConf -> Last a)
+      -> Either ConfigError a
+    lastToEither err f = 
+      maybe (Left err) Right (getLast $ f pc)   
 
 -- | This is the function we'll actually export for building our configuration.
 -- Since it wraps all our efforts to read information from the command line, and
@@ -47,9 +57,8 @@ makeConfig =
 parseOptions
   :: FilePath
   -> AppM ConfigError Conf
-parseOptions =
-  -- Parse the options from the config file: "files/appconfig.json"
-  -- Parse the options from the commandline using 'commandLineParser'
-  -- Combine these with the default configuration 'defaultConf'
-  -- Return the final configuration value
-  error "parseOptions not implemented"
+parseOptions fp =
+  let mkCfg cli file = makeConfig (defaultConf <> file <> cli)
+  in AppM $ do
+  cli' <- commandLineParser
+  (mkCfg cli' =<<) <$> parseJSONConfigFile fp

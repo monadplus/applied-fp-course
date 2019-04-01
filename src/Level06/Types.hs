@@ -27,6 +27,7 @@ module Level06.Types
   , renderContentType
   , confPortToWai
   , fromDBComment
+  , partialConfDecoder
   ) where
 
 import           GHC.Word                           (Word16)
@@ -51,6 +52,7 @@ import           System.Locale                      (defaultTimeLocale)
 import           Waargonaut.Decode                  (Decoder)
 import qualified Waargonaut.Decode                  as D
 import           Waargonaut.Decode.Error            (DecodeError)
+import           Waargonaut.Decode.Types            (CursorHistory)
 
 import           Waargonaut.Encode                  (Encoder)
 import qualified Waargonaut.Encode                  as E
@@ -154,7 +156,10 @@ newtype DBFilePath = DBFilePath
 -- Add some fields to the ``Conf`` type:
 -- - A customisable port number: ``Port``
 -- - A filepath for our SQLite database: ``DBFilePath``
-data Conf = Conf
+data Conf = Conf 
+  { getConfPort :: Port
+  , getConfFilePath :: DBFilePath
+  }
 
 -- We're storing our Port as a Word16 to be more precise and prevent invalid
 -- values from being used in our application. However Wai is not so stringent.
@@ -170,12 +175,15 @@ confPortToWai
   :: Conf
   -> Int
 confPortToWai =
-  error "confPortToWai not implemented"
+  fromIntegral . getPort . getConfPort
 
 -- Similar to when we were considering our application types. We can add to this sum type as we
 -- build our application and the compiler can help us out.
 data ConfigError
-  = BadConfFile DecodeError
+  = BadConfFile (DecodeError, CursorHistory)
+  | MissingPort
+  | MissingDBFilePath
+  | ConfigFileReadError IOError
   deriving Show
 
 -- Our application will be able to load configuration from both a file and
@@ -212,8 +220,8 @@ data PartialConf = PartialConf
 -- on the ``Semigroup`` instance for Last to always get the last value.
 instance Semigroup PartialConf where
   _a <> _b = PartialConf
-    { pcPort       = error "pcPort (<>) not implemented"
-    , pcDBFilePath = error "pcDBFilePath (<>) not implemented"
+    { pcPort       = pcPort _a <> pcPort _b
+    , pcDBFilePath = pcDBFilePath _a <> pcDBFilePath _b
     }
 
 -- We now define our ``Monoid`` instance for ``PartialConf``. Allowing us to
@@ -233,6 +241,10 @@ instance Monoid PartialConf where
 -- have to tell waargonaut how to go about converting the JSON into our PartialConf
 -- data structure.
 partialConfDecoder :: Monad f => Decoder f PartialConf
-partialConfDecoder = error "PartialConf Decoder not implemented"
+partialConfDecoder = D.withCursor $ \c -> do 
+  o <- D.down c 
+  p <- D.fromKey "port" (Last . pure . Port . fromIntegral <$> D.int) o
+  fp <- D.fromKey "filepath" (Last . pure . DBFilePath <$> D.string) o
+  pure $ PartialConf p fp
 
 -- Go to 'src/Level06/Conf/File.hs' next

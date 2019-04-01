@@ -166,6 +166,7 @@ test-suite doctests
   hs-source-dirs:      tests
   build-depends:       base >= 4.8 && <4.13
                      , doctest >= 0.11 && < 0.17
+                     , waargonaut >= 0.6 && < 0.7
                      , applied-fp-course
 
 -- Level Executables

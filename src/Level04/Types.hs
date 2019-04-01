@@ -65,10 +65,10 @@ decodeComment = D.withCursor $ \c -> do
   o <- D.down c
   _commentId <- D.fromKey "commentId"   (CommentId <$> D.int) o 
   _topic <- D.fromKey "topic"       decodeTopic o
-  _commentBody <- D.fromKey "commentText" decodeCommentText c 
-  _commentTime <- D.fromKey "commentTime" decodeISO8601DateTime c 
-  pure $ Comment _commentId _topic _commentBody _commentTime
-     
+  _commentBody <- D.fromKey "commentText" decodeCommentText o
+  _commentTime <- D.fromKey "commentTime" decodeISO8601DateTime o
+  pure $ Comment _commentId _topic _commentBody _commentTime 
+
 fromDBComment
   :: DBComment
   -> Either Error Comment

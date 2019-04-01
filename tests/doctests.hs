@@ -4,5 +4,6 @@ import Test.DocTest (doctest)
 
 main :: IO ()
 main = doctest
-  [ -- No doctests yet!
+  [ 
+    "src/Level06/Conf/File.hs"
   ]

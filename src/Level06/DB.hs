@@ -24,7 +24,7 @@ import qualified Database.SQLite.Simple             as Sql
 import qualified Database.SQLite.SimpleErrors       as Sql
 import           Database.SQLite.SimpleErrors.Types (SQLiteResponse)
 
-import           Level06.AppM                       (App, liftEither)
+import           Level06.AppM                       (App, AppM (..), liftEither)
 
 import           Level06.Types                      (Comment, CommentText,
                                                      Error (DBError), Topic,
@@ -49,8 +49,8 @@ closeDB =
 
 initDB
   :: FilePath
-  -> IO ( Either SQLiteResponse FirstAppDB )
-initDB fp = Sql.runDBAction $ do
+  -> AppM SQLiteResponse FirstAppDB
+initDB fp = AppM $ Sql.runDBAction $ do
   -- Initialise the connection to the DB...
   -- - What could go wrong here?
   -- - What haven't we be told in the types?
