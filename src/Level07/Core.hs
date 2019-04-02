@@ -8,7 +8,6 @@ module Level07.Core
 import           Control.Applicative                (liftA2)
 import qualified Control.Exception                  as Ex
 import           Control.Monad                      (join)
-
 import           Control.Monad.IO.Class             (liftIO)
 import           Control.Monad.Reader               (asks)
 
@@ -44,7 +43,8 @@ import           Level07.Types                      (Conf, ConfigError,
                                                      Error (..), RqType (..),
                                                      confPortToWai,
                                                      encodeComment, encodeTopic,
-                                                     mkCommentText, mkTopic)
+                                                     mkCommentText, mkTopic,
+                                                     getDBFilePath, dbFilePath)
 
 import           Level07.AppM                       (App, Env (..), liftEither,
                                                      runApp)
@@ -60,7 +60,12 @@ data StartUpError
   = DBInitErr SQLiteResponse
   | ConfErr ConfigError
   deriving Show
-
+  -- { 
+  --   envLoggingFn :: Text -> App ()
+  -- -- We're able to nest records to keep things neat and tidy.
+  -- , envConfig    :: Conf
+  -- , envDB        :: FirstAppDB
+  -- }
 runApplication :: IO ()
 runApplication = do
   appE <- runExceptT prepareAppReqs
@@ -83,9 +88,13 @@ runApplication = do
 -- 'mtl' on Hackage: https://hackage.haskell.org/package/mtl
 --
 prepareAppReqs :: ExceptT StartUpError IO Env
-prepareAppReqs = error "prepareAppReqs not reimplemented with ExceptT"
-  -- You may copy your previous implementation of this function and try refactoring it. On the
-  -- condition you have to explain to the person next to you what you've done and why it works.
+prepareAppReqs = do
+  conf <- ExceptT $ first ConfErr <$> Conf.parseOptions "files/appconfig.json"
+  db   <- ExceptT $ first DBInitErr <$> DB.initDB (dbFilePath conf)
+  pure $ Env {envLoggingFn = logger, envConfig = conf, envDB = db}
+  where
+    logger :: Text -> App ()
+    logger = liftIO . putStrLn . Text.unpack
 
 -- | Now that our request handling and response creating functions operate
 -- within our App context, we need to run the App to get our IO action out
@@ -94,8 +103,15 @@ prepareAppReqs = error "prepareAppReqs not reimplemented with ExceptT"
 app
   :: Env
   -> Application
-app =
-  error "Copy your completed 'app' from the previous level and refactor it here"
+app env rq cb = 
+  cb =<< (handleRespErr <$> f env)
+  where
+    f :: Env -> IO (Either Error Response)
+    f = runApp (handleRequest =<< mkRequest rq)
+    
+    handleRespErr :: Either Error Response -> Response
+    handleRespErr = either mkErrorResponse id
+
 
 handleRequest
   :: RqType

@@ -240,11 +240,19 @@ instance Monoid PartialConf where
 -- library to handle the parsing and decoding for us. In order to do this, we
 -- have to tell waargonaut how to go about converting the JSON into our PartialConf
 -- data structure.
+
 partialConfDecoder :: Monad f => Decoder f PartialConf
-partialConfDecoder = D.withCursor $ \c -> do 
-  o <- D.down c 
-  p <- D.fromKey "port" (Last . pure . Port . fromIntegral <$> D.int) o
-  fp <- D.fromKey "dbName" (Last . pure . DBFilePath <$> D.string) o
-  pure $ PartialConf p fp
+partialConfDecoder = PartialConf
+  <$> lastAt "port" D.integral Port
+  <*> lastAt "dbFilePath" D.string DBFilePath
+  where
+    lastAt k d c = Last . fmap c <$> D.atKeyOptional k d
+
+    -- | Monadic (don't)
+    -- D.withCursor $ \c -> do 
+    --   o <- D.down c 
+    --   p <- D.fromKey "port" (Last . pure . Port . fromIntegral <$> D.int) o
+    --   fp <- D.fromKey "dbName" (Last . pure . DBFilePath <$> D.string) o
+    --   pure $ PartialConf p fp
 
 -- Go to 'src/Level06/Conf/File.hs' next
