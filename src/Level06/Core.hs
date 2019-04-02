@@ -83,7 +83,7 @@ runApplication = do
 --
 prepareAppReqs :: AppM StartUpError (Conf, DB.FirstAppDB)
 prepareAppReqs = do 
-  conf <- first ConfErr (Conf.parseOptions "file/appconfig.json")
+  conf <- first ConfErr (Conf.parseOptions "files/appconfig.json")
   db   <- first DBInitErr (DB.initDB $ getDBFilePath . getConfFilePath $ conf)  
   pure (conf, db)
 

@@ -13,11 +13,11 @@ import           Network.HTTP.Types.Method (StdMethod(..))
 import           Network.Wai.Test   (SResponse(..), request, srequest)         
 import           System.Exit        (exitFailure)
 -- 
-import qualified Level05.Core       as Core
+import qualified Level06.Core       as Core
 
 main :: IO ()
 main = do
-    dbOrError <- Core.prepareAppReqs
+    x <- runAppM Core.prepareAppReqs
     case dbOrError of 
       Left err -> print err >> exitFailure
       Right _db -> test _db >> Core.closeDB _db
@@ -46,10 +46,10 @@ main = do
                     assertContentType "application/json" resp
                     assertBody "[\"fudge\"]" resp
 
-                , testWai app "Remove topic" $ do
-                    resp <- request $ buildRequest DELETE "fudge/rm"
-                    assertStatus' HTTP.status200 resp
-                    assertBody "Success" resp
+                -- , testWai app "Remove topic" $ do
+                --     resp <- request $ buildRequest DELETE "fudge/rm"
+                --     assertStatus' HTTP.status200 resp
+                --     assertBody "Success" resp
                ],
         
             testGroup "Status 4XX-5XX"
